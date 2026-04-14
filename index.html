@@ -99,6 +99,35 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hira
 .modal-box p{font-size:13px;color:#666;line-height:1.7}
 .modal-box .mbtn{margin-top:22px;padding:11px 44px;border:none;border-radius:10px;background:linear-gradient(135deg,#1a7a3a,#2d9e52);color:#fff;font-size:14px;font-weight:600;cursor:pointer}
 
+
+/* === Schedule Summary === */
+.sched-summary{background:#fff;border-radius:14px;padding:16px 18px;margin-bottom:12px;box-shadow:0 1px 8px rgba(0,0,0,0.04)}
+.sched-summary h3{font-size:14px;font-weight:600;color:#333;margin-bottom:12px}
+.sched-week-label{font-size:11px;color:#999;margin-bottom:8px}
+.sched-total{display:flex;justify-content:space-around;background:#f7faf8;border-radius:10px;padding:12px 8px;margin-bottom:14px}
+.sched-total .st-item{text-align:center}
+.sched-total .st-val{font-size:20px;font-weight:700;color:#1a7a3a}
+.sched-total .st-lab{font-size:11px;color:#999;margin-top:2px}
+.anchor-row{display:flex;align-items:center;padding:8px 0;border-top:1px solid #f5f5f5}
+.anchor-row:first-child{border-top:none}
+.anchor-tag{font-size:11px;background:#e8f5ec;color:#1a7a3a;border-radius:6px;padding:2px 8px;margin-right:8px;flex-shrink:0;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.anchor-stats{flex:1;font-size:12px;color:#666}
+.anchor-stats b{color:#333}
+.anchor-da{font-size:11px;color:#e74c3c;margin-left:6px;font-weight:600}
+
+/* === Schedule Items (redesign) === */
+.sched-item{background:#fff;border-radius:12px;padding:12px 16px;margin-bottom:8px;position:relative;box-shadow:0 1px 4px rgba(0,0,0,0.04);display:flex;align-items:center;gap:10px}
+.sched-item.da-chang{border-left:3px solid #e74c3c}
+.si-date-block{text-align:center;min-width:44px}
+.si-date-block .si-md{font-size:15px;font-weight:700;color:#1a7a3a;line-height:1.2}
+.si-date-block .si-wd{font-size:10px;color:#999}
+.si-body{flex:1;min-width:0}
+.si-time-row{font-size:13px;color:#555;margin-bottom:2px}
+.si-gmv-row{font-size:13px;font-weight:600;color:#1a7a3a}
+.si-da-badge{display:inline-block;background:#fff0f0;color:#e74c3c;font-size:10px;font-weight:600;border-radius:4px;padding:1px 6px;margin-left:6px}
+.si-del{background:none;border:none;color:#ddd;font-size:18px;cursor:pointer;padding:4px;flex-shrink:0}
+.si-del:active{color:#e74c3c}
+
 /* === Footer === */
 .footer{text-align:center;padding:28px 16px 20px;font-size:11px;color:#ccc}
 </style>
@@ -199,12 +228,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hira
     </div>
   </div>
 
-  <!-- Schedule List -->
-  <button class="schedule-toggle" id="toggleList">
-    <span class="arrow" id="toggleArrow">▶</span> 展开我的直播排期
-  </button>
-  <div class="schedule-list" id="schedList">
-    <div class="empty-tip">还没有提报排期哦～<br>快去填报你的直播计划吧！📝</div>
+  <!-- Schedule Summary -->
+  <div class="sched-summary" id="schedSummary" style="display:none">
+    <h3>📅 我的直播排期</h3>
+    <div class="sched-week-label" id="schedWeekLabel"></div>
+    <div class="sched-total">
+      <div class="st-item"><div class="st-val" id="vSessions2">0</div><div class="st-lab">累计场次</div></div>
+      <div class="st-item"><div class="st-val" id="vGmv2">0.0</div><div class="st-lab">预估GMV(万)</div></div>
+      <div class="st-item"><div class="st-val" id="vDaChang2">0</div><div class="st-lab">大场</div></div>
+    </div>
+    <div id="anchorBreakdown"></div>
+    <div id="schedList"></div>
   </div>
 </div>
 
@@ -402,24 +436,42 @@ document.getElementById('toggleList').addEventListener('click',function(){
   render();
 });
 
+// === 工具函数 ===
+var WD=['日','一','二','三','四','五','六'];
+function fmtDate(d){
+  var dt=new Date(d+'T00:00:00');
+  var m=('0'+(dt.getMonth()+1)).slice(-2),day=('0'+dt.getDate()).slice(-2);
+  return m+'/'+day+' 周'+WD[dt.getDay()];
+}
+function getWeekRange(){
+  var now=new Date();
+  var mon=new Date(now);
+  mon.setDate(now.getDate()-((now.getDay()+6)%7));
+  var sun=new Date(mon);sun.setDate(mon.getDate()+6);
+  function fmt(d){return('0'+(d.getMonth()+1)).slice(-2)+'/'+('0'+d.getDate()).slice(-2)}
+  return fmt(mon)+' - '+fmt(sun);
+}
+
 // === Render ===
 async function render(){
   var list=await load();
-  // 过滤已删除的
   list=list.filter(function(x){return !x._deleted});
-  // 按选中店铺隔离：只显示当前店铺的排期
   var curStore=hName.value.trim();
   if(curStore){
     list=list.filter(function(x){return x.storeName===curStore});
   } else {
-    list=[];  // 未选店铺时不显示任何排期
+    list=[];
   }
-  var n=list.length,tgmv=(list.reduce(function(s,x){return s+x.gmv},0)/10000).toFixed(1),
+  var n=list.length,
+      tgmv=(list.reduce(function(s,x){return s+x.gmv},0)/10000).toFixed(1),
       dc=list.filter(function(x){return x.isDaChang}).length;
+
+  // 顶部统计
   document.getElementById('vSessions').textContent=n;
   document.getElementById('vGmv').textContent=tgmv;
   document.getElementById('vDaChang').textContent=dc;
-  // Tiers（按周）
+
+  // 扶持进度
   var p3=Math.min(n/5*100,100),p2=Math.min(n/3*100,100),p1=Math.min(n/1*100,100);
   document.getElementById('bar3').style.width=p3+'%';
   document.getElementById('bar2').style.width=p2+'%';
@@ -428,19 +480,53 @@ async function render(){
   document.getElementById('bar2').className='tier-pfill'+(p2>=100?' done':'');
   document.getElementById('bar1').className='tier-pfill'+(p1>=100?' done':'');
   document.getElementById('remainN').textContent=n>=2?0:(2-n);
-  // Items
-  var c=document.getElementById('schedList');
-  if(!n){c.innerHTML='<div class="empty-tip">还没有提报排期哦～<br>快去填报你的直播计划吧！📝</div>';return}
-  list.sort(function(a,b){return b.date.localeCompare(a.date)||b.time.localeCompare(a.time)});
-  c.innerHTML=list.map(function(s){
+
+  // 排期汇总卡片
+  var summaryEl=document.getElementById('schedSummary');
+  if(!curStore||!n){summaryEl.style.display='none';return;}
+  summaryEl.style.display='block';
+
+  // 周范围
+  document.getElementById('schedWeekLabel').textContent='本周累计（'+getWeekRange()+'）';
+  document.getElementById('vSessions2').textContent=n;
+  document.getElementById('vGmv2').textContent=tgmv;
+  document.getElementById('vDaChang2').textContent=dc;
+
+  // 子账号明细
+  var m=MERCHANTS.find(function(x){return x.name===curStore});
+  var breakdownEl=document.getElementById('anchorBreakdown');
+  if(m&&m.anchors&&m.anchors.length>1){
+    var byAnchor={};
+    list.forEach(function(s){
+      var aid=s.store_id||s.storeId||'未知';
+      if(!byAnchor[aid])byAnchor[aid]={n:0,gmv:0,da:0};
+      byAnchor[aid].n++;byAnchor[aid].gmv+=s.gmv;
+      if(s.isDaChang)byAnchor[aid].da++;
+    });
+    breakdownEl.innerHTML=Object.keys(byAnchor).map(function(aid){
+      var b=byAnchor[aid];
+      return '<div class="anchor-row">'+
+        '<span class="anchor-tag" title="'+aid+'">…'+aid.slice(-8)+'</span>'+
+        '<span class="anchor-stats"><b>'+b.n+'场</b> · ¥'+(b.gmv/10000).toFixed(1)+'万'+
+        (b.da?'<span class="anchor-da">'+b.da+'大场</span>':'')+'</span></div>';
+    }).join('');
+  } else {
+    breakdownEl.innerHTML='';
+  }
+
+  // 排期列表
+  list.sort(function(a,b){return a.date.localeCompare(b.date)||a.time.localeCompare(b.time)});
+  document.getElementById('schedList').innerHTML=list.map(function(s){
+    var fd=fmtDate(s.date).split(' ');
     return '<div class="sched-item'+(s.isDaChang?' da-chang':'')+'">'+
-      '<div class="si-store">'+s.storeName+'</div>'+
-      '<div class="si-time">'+s.date+' '+s.time+' · 预计'+s.dur+'小时</div>'+
-      '<div class="si-gmv">预估GMV ¥'+s.gmv.toLocaleString()+(s.isDaChang?' 🌟大场':'')+'</div>'+
-      '<button class="si-del" onclick="del(\''+s.id+'\')">✕</button></div>'
+      '<div class="si-date-block"><div class="si-md">'+fd[0]+'</div><div class="si-wd">'+fd[1]+'</div></div>'+
+      '<div class="si-body">'+
+        '<div class="si-time-row">'+s.time+' · '+s.dur+'小时</div>'+
+        '<div class="si-gmv-row">预估 ¥'+s.gmv.toLocaleString()+(s.isDaChang?'<span class="si-da-badge">大场</span>':'')+'</div>'+
+      '</div>'+
+      '<button class="si-del" onclick="del(''+s.id+'')">✕</button></div>';
   }).join('');
 }
-
 async function del(id){
   if(!confirm('确定删除？'))return;
   await removeItem(id);
