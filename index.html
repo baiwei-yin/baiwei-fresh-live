@@ -249,6 +249,8 @@ async function load(){
       data.gmv = parseFloat(data.gmv) || 0;
       data.isDaChang = data.is_da_chang === 'true';
       data.dur = parseInt(data.duration) || 4;
+      // 统一字段名：store_name → storeName
+      if(data.store_name && !data.storeName) data.storeName = data.store_name;
       return data;
     });
     return _cache;
@@ -363,7 +365,11 @@ function pickStore(id,name){
 
 document.getElementById('reselectBtn').addEventListener('click',function(){
   wrap.style.display='';sel.style.display='none';
-  inp.value='';inp.focus();
+  inp.value='';hId.value='';hName.value='';
+  document.getElementById('anchorGroup').style.display='none';
+  document.getElementById('anchorId').value='';
+  inp.focus();
+  render();
 });
 
 // === Form Submit ===
@@ -401,6 +407,13 @@ async function render(){
   var list=await load();
   // 过滤已删除的
   list=list.filter(function(x){return !x._deleted});
+  // 按选中店铺隔离：只显示当前店铺的排期
+  var curStore=hName.value.trim();
+  if(curStore){
+    list=list.filter(function(x){return x.storeName===curStore});
+  } else {
+    list=[];  // 未选店铺时不显示任何排期
+  }
   var n=list.length,tgmv=(list.reduce(function(s,x){return s+x.gmv},0)/10000).toFixed(1),
       dc=list.filter(function(x){return x.isDaChang}).length;
   document.getElementById('vSessions').textContent=n;
@@ -421,7 +434,7 @@ async function render(){
   list.sort(function(a,b){return b.date.localeCompare(a.date)||b.time.localeCompare(a.time)});
   c.innerHTML=list.map(function(s){
     return '<div class="sched-item'+(s.isDaChang?' da-chang':'')+'">'+
-      '<div class="si-store">'+s.store_name+'</div>'+
+      '<div class="si-store">'+s.storeName+'</div>'+
       '<div class="si-time">'+s.date+' '+s.time+' · 预计'+s.dur+'小时</div>'+
       '<div class="si-gmv">预估GMV ¥'+s.gmv.toLocaleString()+(s.isDaChang?' 🌟大场':'')+'</div>'+
       '<button class="si-del" onclick="del(\''+s.id+'\')">✕</button></div>'
