@@ -331,7 +331,7 @@ document.getElementById('anchorDd').addEventListener('click',function(e){
     el.querySelector('.sel').textContent='○';
   });
   it.querySelector('.sel').textContent='●';
-  document.getElementById('anchorInput').value='主播 '+aid.slice(-6);
+  document.getElementById('anchorInput').value=aid;
   document.getElementById('anchorDd').classList.remove('show');
 });
 
@@ -349,11 +349,11 @@ function pickStore(id,name){
     ag.style.display='block';
     // 默认选第一个
     aid.value=m.anchors[0];
-    ainp.value='主播 '+m.anchors[0].slice(-6);
+    ainp.value=m.anchors[0];
     // 设置下拉
     var add=document.getElementById('anchorDd');
     add.innerHTML=m.anchors.map(function(a,i){
-      return '<div class="search-item" data-anchor="'+a+'" data-idx="'+i+'"><span class="sel">'+(i===0?'●':'○')+'</span><span>主播 '+a.slice(-6)+'</span><span class="tp">'+a+'</span></div>';
+      return '<div class="search-item" data-anchor="'+a+'" data-idx="'+i+'"><span class="sel">'+(i===0?'●':'○')+'</span><span>'+a+'</span></div>';
     }).join('');
   } else {
     ag.style.display='none';
