@@ -374,7 +374,7 @@ async function render(){
   list.sort(function(a,b){return b.date.localeCompare(a.date)||b.time.localeCompare(a.time)});
   c.innerHTML=list.map(function(s){
     return '<div class="sched-item'+(s.isDaChang?' da-chang':'')+'">'+
-      '<div class="si-store">'+s.storeName+'</div>'+
+      '<div class="si-store">'+s.store_name+'</div>'+
       '<div class="si-time">'+s.date+' '+s.time+' · 预计'+s.dur+'小时</div>'+
       '<div class="si-gmv">预估GMV ¥'+s.gmv.toLocaleString()+(s.isDaChang?' 🌟大场':'')+'</div>'+
       '<button class="si-del" onclick="del(\''+s.id+'\')">✕</button></div>'
