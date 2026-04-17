@@ -632,7 +632,7 @@ async function render(){
         '<div class="si-time-row">'+s.time+' · '+s.dur+'小时</div>'+
         '<div class="si-gmv-row">预估 ¥'+s.gmv.toLocaleString()+(s.isDaChang?'<span class="si-da-badge">大场</span>':'')+'</div>'+
       '</div>'+
-      '<button class="si-del" onclick="del(''+s.id+'')">✕</button></div>';
+      '<button class="si-del" onclick="del(\''+s.id+'\')">✕</button></div>';
   }).join('');
 }
 async function del(id){
