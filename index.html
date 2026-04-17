@@ -130,6 +130,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hira
 
 /* === Footer === */
 .footer{text-align:center;padding:28px 16px 20px;font-size:11px;color:#ccc}
+
+/* === Submitting state === */
+.submit-btn.submitting{opacity:0.6;pointer-events:none}
+
+/* === Error modal === */
+.error-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;visibility:hidden;transition:all 0.25s}
+.error-modal-bg.show{opacity:1;visibility:visible}
+.error-modal-box{background:#fff;border-radius:18px;padding:36px 28px 28px;text-align:center;max-width:300px;width:88%;transform:scale(0.9);transition:transform 0.25s;border-top:4px solid #e74c3c}
+.error-modal-bg.show .error-modal-box{transform:scale(1)}
+.error-modal-box .mico{font-size:52px;margin-bottom:14px}
+.error-modal-box h2{font-size:18px;font-weight:700;margin-bottom:10px;color:#e74c3c}
+.error-modal-box p{font-size:13px;color:#666;line-height:1.7}
+.error-modal-box .mbtn-retry{margin-top:22px;padding:11px 32px;border:2px solid #e74c3c;border-radius:10px;background:#fff;color:#e74c3c;font-size:14px;font-weight:600;cursor:pointer;margin-right:10px}
+.error-modal-box .mbtn-close{margin-top:22px;padding:11px 32px;border:none;border-radius:10px;background:#e74c3c;color:#fff;font-size:14px;font-weight:600;cursor:pointer}
 </style>
 </head>
 <body>
@@ -249,8 +263,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hira
   <div class="modal-box">
     <div class="mico">🎉</div>
     <h2>排期提交成功！</h2>
-    <p>我们已收到你的直播计划<br>流量扶持将在开播前自动安排<br><br>加油，这场一定爆！🔥</p>
-    <button class="mbtn" id="modalClose">知道了</button>
+    <p>我们已收到你的直播计划<br>流量扶持将在开播前自动安排<br><br>👇 请在下方「我的直播排期」列表中核对信息<br>加油，这场一定爆！🔥</p>
+    <button class="mbtn" id="modalClose">好的，去核对</button>
+  </div>
+</div>
+
+<!-- Error Modal -->
+<div class="error-modal-bg" id="errorModal">
+  <div class="error-modal-box">
+    <div class="mico">😰</div>
+    <h2>提交失败</h2>
+    <p id="errorMsg">网络异常，排期未能保存成功。<br>请检查网络后重试。</p>
+    <button class="mbtn-retry" id="errorRetry">重新提交</button>
+    <button class="mbtn-close" id="errorClose">关闭</button>
   </div>
 </div>
 
@@ -302,7 +327,7 @@ async function save(item){
                'gmv=' + item.gmv + '\n' +
                'is_da_chang=' + item.isDaChang + '\n' +
                'ts=' + item.ts;
-    await fetch(GH_API, {
+    var resp = await fetch(GH_API, {
       method: 'POST',
       headers: {
         'Authorization': 'token ' + _p1,
@@ -312,7 +337,15 @@ async function save(item){
       },
       body: JSON.stringify({ title: title, body: body, labels: ['排期提报'] })
     });
-  } catch(e) {}
+    if (!resp.ok) {
+      console.error('GitHub API error:', resp.status, resp.statusText);
+      return false;
+    }
+    return true;
+  } catch(e) {
+    console.error('Save failed:', e);
+    return false;
+  }
 }
 
 async function removeItem(id){
@@ -407,7 +440,8 @@ document.getElementById('reselectBtn').addEventListener('click',function(){
 });
 
 // === Form Submit ===
-document.getElementById('schedForm').addEventListener('submit',function(e){
+var _pendingItem = null; // 暂存提交失败的数据
+document.getElementById('schedForm').addEventListener('submit', async function(e){
   e.preventDefault();
   var name=hName.value.trim(),date=document.getElementById('liveDate').value,
       time=document.getElementById('liveTime').value,dur=parseInt(document.getElementById('liveDur').value)||4,
@@ -418,16 +452,90 @@ document.getElementById('schedForm').addEventListener('submit',function(e){
   if(gmv<=0)return alert('请输入预估GMV');
   var item={id:Date.now().toString(36),storeName:name,storeId:document.getElementById('anchorId').value||hId.value,date:date,time:time,
     dur:Math.min(dur,24),gmv:gmv,isDaChang:gmv>DA_CHANG,ts:new Date().toISOString()};
-  save(item);
-  _cache.push(item);
-  // Reset
-  this.reset();document.getElementById('liveTime').value='19:00';document.getElementById('liveDur').value='4';
-  wrap.style.display='';sel.style.display='none';inp.value='';hId.value='';hName.value='';
-  document.getElementById('modal').classList.add('show');
-  render();
+  
+  // 显示提交中状态
+  var btn=document.getElementById('submitBtn');
+  btn.classList.add('submitting');
+  btn.textContent='提交中...';
+  
+  // 保存到 GitHub
+  var ok = await save(item);
+  
+  btn.classList.remove('submitting');
+  btn.textContent='提交排期 ✨';
+  
+  if(ok){
+    // 成功：先刷新列表确认数据已写入，再弹成功提示
+    await render();
+    _cache.push(item); // 加入本地缓存
+    // 重置表单
+    this.reset();document.getElementById('liveTime').value='19:00';document.getElementById('liveDur').value='4';
+    wrap.style.display='';sel.style.display='none';inp.value='';hId.value='';hName.value='';
+    document.getElementById('anchorGroup').style.display='none';
+    // 弹出成功提示
+    document.getElementById('modal').classList.add('show');
+    // 自动展开排期列表，引导商家核对
+    var listEl=document.getElementById('schedList');
+    listEl.classList.add('open');
+    var arrowEl=document.getElementById('toggleArrow');
+    if(arrowEl) arrowEl.classList.add('open');
+    // 滚动到排期汇总区域
+    setTimeout(function(){
+      var summary=document.getElementById('schedSummary');
+      if(summary) summary.scrollIntoView({behavior:'smooth',block:'center'});
+    }, 300);
+  } else {
+    // 失败：显示错误弹窗
+    _pendingItem = item; // 暂存数据供重试使用
+    document.getElementById('errorModal').classList.add('show');
+  }
 });
 
 document.getElementById('modalClose').addEventListener('click',function(){document.getElementById('modal').classList.remove('show')});
+
+// === Error Modal ===
+document.getElementById('errorClose').addEventListener('click',function(){
+  document.getElementById('errorModal').classList.remove('show');
+  _pendingItem = null;
+});
+
+document.getElementById('errorRetry').addEventListener('click', async function(){
+  document.getElementById('errorModal').classList.remove('show');
+  if(!_pendingItem) return;
+  
+  var btn=document.getElementById('submitBtn');
+  btn.classList.add('submitting');
+  btn.textContent='重新提交中...';
+  
+  var ok = await save(_pendingItem);
+  
+  btn.classList.remove('submitting');
+  btn.textContent='提交排期 ✨';
+  
+  if(ok){
+    await render();
+    _cache.push(_pendingItem);
+    var name = _pendingItem.storeName;
+    _pendingItem = null;
+    document.getElementById('schedForm').reset();
+    document.getElementById('liveTime').value='19:00';
+    document.getElementById('liveDur').value='4';
+    wrap.style.display='';sel.style.display='none';inp.value='';hId.value='';hName.value='';
+    document.getElementById('anchorGroup').style.display='none';
+    document.getElementById('modal').classList.add('show');
+    var listEl=document.getElementById('schedList');
+    listEl.classList.add('open');
+    var arrowEl=document.getElementById('toggleArrow');
+    if(arrowEl) arrowEl.classList.add('open');
+    setTimeout(function(){
+      var summary=document.getElementById('schedSummary');
+      if(summary) summary.scrollIntoView({behavior:'smooth',block:'center'});
+    }, 300);
+  } else {
+    document.getElementById('errorMsg').innerHTML = '仍然提交失败，请检查网络后再次重试。<br>如持续失败请联系运营同学。';
+    document.getElementById('errorModal').classList.add('show');
+  }
+});
 
 // === Toggle ===
 document.getElementById('toggleList').addEventListener('click',function(){
@@ -524,7 +632,7 @@ async function render(){
         '<div class="si-time-row">'+s.time+' · '+s.dur+'小时</div>'+
         '<div class="si-gmv-row">预估 ¥'+s.gmv.toLocaleString()+(s.isDaChang?'<span class="si-da-badge">大场</span>':'')+'</div>'+
       '</div>'+
-      '<button class="si-del" onclick="del(\''+s.id+'\')">✕</button></div>';
+      '<button class="si-del" onclick="del(''+s.id+'')">✕</button></div>';
   }).join('');
 }
 async function del(id){
